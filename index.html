@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Jumping Josh: Bills TD Dash</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="game-shell">
+    <header>
+      <h1>Jumping Josh: Bills TD Dash</h1>
+      <p>Run Josh Allen to the end zone while dodging Chiefs defenders.</p>
+    </header>
+
+    <section class="hud">
+      <div class="stat">
+        <span class="label">Sprint</span>
+        <div class="meter"><div id="sprintFill" class="fill"></div></div>
+      </div>
+      <div class="stat">
+        <span class="label">Power-Up</span>
+        <div id="powerLabel" class="power-label">None</div>
+      </div>
+      <div class="stat">
+        <span class="label">Status</span>
+        <div id="statusLabel" class="status-label">Ready</div>
+      </div>
+    </section>
+
+    <canvas id="gameCanvas" width="900" height="600" aria-label="Football field"></canvas>
+
+    <section class="controls">
+      <h2>Controls</h2>
+      <ul>
+        <li>Move: WASD or Arrow Keys</li>
+        <li>Sprint: Shift (burst with cooldown)</li>
+        <li>Truck Power: Q (when active)</li>
+        <li>Hurdle Power: E (when active, timed near defender)</li>
+      </ul>
+      <button id="restartButton" type="button">Restart Run</button>
+    </section>
+  </div>
+
+  <script src="game.js"></script>
+</body>
+</html>
