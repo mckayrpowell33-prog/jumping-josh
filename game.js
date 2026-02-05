@@ -5,6 +5,8 @@ const sprintFill = document.getElementById("sprintFill");
 const powerLabel = document.getElementById("powerLabel");
 const statusLabel = document.getElementById("statusLabel");
 const restartButton = document.getElementById("restartButton");
+const fullscreenButton = document.getElementById("fullscreenButton");
+const fieldPanel = document.querySelector(".field-panel");
 
 const field = {
   width: canvas.width,
@@ -21,11 +23,14 @@ const player = {
   sprintSpeed: 4.2,
   color: "#00338d",
   jersey: "#c60c30",
+  baseColor: "#00338d",
+  baseJersey: "#c60c30",
   sprintEnergy: 100,
   sprintCooldown: 0,
   isSprinting: false,
   truckActive: false,
   hurdleActive: false,
+  unstoppable: false,
   hurdleArc: 0,
   hurdleTimer: 0,
   truckTimer: 0,
@@ -42,6 +47,7 @@ const gameState = {
   difficulty: 1,
   distanceProgress: 0,
   lastSpawn: 0,
+  tick: 0,
 };
 
 const keys = new Set();
@@ -88,6 +94,9 @@ function resetGame() {
   player.truckTimer = 0;
   player.powerUses = 0;
   player.pendingPower = null;
+  player.unstoppable = false;
+  player.color = player.baseColor;
+  player.jersey = player.baseJersey;
 
   gameState.running = true;
   gameState.message = "Run it in!";
@@ -97,6 +106,7 @@ function resetGame() {
   gameState.difficulty = 1;
   gameState.distanceProgress = 0;
   gameState.lastSpawn = 0;
+  gameState.tick = 0;
 
   spawnDefenderWave(3);
 }
@@ -162,16 +172,16 @@ function activateHurdle() {
 function handleInput() {
   let moveX = 0;
   let moveY = 0;
-  if (keys.has("ArrowUp") || keys.has("w")) moveY -= 1;
-  if (keys.has("ArrowDown") || keys.has("s")) moveY += 1;
-  if (keys.has("ArrowLeft") || keys.has("a")) moveX -= 1;
-  if (keys.has("ArrowRight") || keys.has("d")) moveX += 1;
+  if (keys.has("ArrowUp")) moveY -= 1;
+  if (keys.has("ArrowDown")) moveY += 1;
+  if (keys.has("ArrowLeft")) moveX -= 1;
+  if (keys.has("ArrowRight")) moveX += 1;
 
   const magnitude = Math.hypot(moveX, moveY) || 1;
   const normalizedX = moveX / magnitude;
   const normalizedY = moveY / magnitude;
 
-  player.isSprinting = keys.has("Shift") && player.sprintEnergy > 0;
+  player.isSprinting = keys.has("s") && player.sprintEnergy > 0;
   const speed = player.isSprinting ? player.sprintSpeed : player.speed;
 
   player.x += normalizedX * speed;
@@ -222,6 +232,12 @@ function checkCollisions() {
     if (defender.knockedDown) continue;
     const distance = Math.hypot(player.x - defender.x, player.y - defender.y);
     if (distance < player.radius + defender.radius - player.hurdleArc) {
+      if (player.unstoppable) {
+        defender.knockedDown = true;
+        defender.recoverTimer = 180;
+        playBeep("truck");
+        continue;
+      }
       if (player.truckActive && player.powerUses > 0) {
         defender.knockedDown = true;
         defender.recoverTimer = 120;
@@ -311,7 +327,10 @@ function drawField() {
   ctx.fillRect(0, 0, field.width, field.height);
 
   // End zone
+  const endZoneGlow = 0.2 + Math.sin(gameState.tick / 20) * 0.05;
   ctx.fillStyle = "#00338d";
+  ctx.fillRect(0, 0, field.width, field.endZoneHeight);
+  ctx.fillStyle = `rgba(255, 255, 255, ${endZoneGlow})`;
   ctx.fillRect(0, 0, field.width, field.endZoneHeight);
   ctx.fillStyle = "#f2c94c";
   ctx.font = "bold 28px Trebuchet MS";
@@ -319,8 +338,9 @@ function drawField() {
   ctx.fillText("BILLS END ZONE", field.width / 2, 50);
 
   // Yard lines
-  ctx.strokeStyle = "rgba(255,255,255,0.2)";
   for (let y = field.endZoneHeight + 40; y < field.height; y += 60) {
+    const linePulse = 0.15 + Math.sin((gameState.tick + y) / 35) * 0.05;
+    ctx.strokeStyle = `rgba(255,255,255,${linePulse})`;
     ctx.beginPath();
     ctx.moveTo(field.sidelines, y);
     ctx.lineTo(field.width - field.sidelines, y);
@@ -335,22 +355,23 @@ function drawField() {
 }
 
 function drawPlayer() {
+  const bob = Math.sin(gameState.tick / 10) * 2;
   // Shadow
   ctx.fillStyle = "rgba(0,0,0,0.4)";
   ctx.beginPath();
-  ctx.ellipse(player.x, player.y + 6, 18, 6, 0, 0, Math.PI * 2);
+  ctx.ellipse(player.x, player.y + 6 + bob, 18, 6, 0, 0, Math.PI * 2);
   ctx.fill();
 
   // Hurdle arc
   ctx.save();
-  ctx.translate(player.x, player.y - player.hurdleArc);
+  ctx.translate(player.x, player.y - player.hurdleArc + bob);
 
-  ctx.fillStyle = player.truckActive ? "#f2c94c" : player.color;
+  ctx.fillStyle = player.unstoppable ? "#0b0b0b" : player.truckActive ? "#f2c94c" : player.color;
   ctx.beginPath();
   ctx.arc(0, 0, player.radius, 0, Math.PI * 2);
   ctx.fill();
 
-  ctx.fillStyle = player.jersey;
+  ctx.fillStyle = player.unstoppable ? "#111111" : player.jersey;
   ctx.fillRect(-8, -10, 16, 20);
 
   ctx.fillStyle = "#ffffff";
@@ -360,35 +381,45 @@ function drawPlayer() {
 
   ctx.restore();
 
-  if (player.truckActive) {
-    ctx.strokeStyle = "rgba(242, 201, 76, 0.8)";
+  if (player.truckActive || player.unstoppable) {
+    ctx.strokeStyle = player.unstoppable
+      ? "rgba(0, 0, 0, 0.8)"
+      : "rgba(242, 201, 76, 0.8)";
     ctx.lineWidth = 3;
     ctx.beginPath();
-    ctx.arc(player.x, player.y - player.hurdleArc, player.radius + 6, 0, Math.PI * 2);
+    ctx.arc(player.x, player.y - player.hurdleArc + bob, player.radius + 6, 0, Math.PI * 2);
     ctx.stroke();
     ctx.lineWidth = 1;
   }
 }
 
 function drawDefenders() {
-  gameState.defenders.forEach((defender) => {
+  gameState.defenders.forEach((defender, index) => {
+    const bob = Math.sin(gameState.tick / 12 + index) * 1.5;
     ctx.fillStyle = defender.knockedDown ? "rgba(200, 16, 46, 0.4)" : "#c8102e";
     ctx.beginPath();
-    ctx.arc(defender.x, defender.y, defender.radius, 0, Math.PI * 2);
+    ctx.arc(defender.x, defender.y + bob, defender.radius, 0, Math.PI * 2);
     ctx.fill();
 
     ctx.fillStyle = "#f2c94c";
     ctx.beginPath();
-    ctx.arc(defender.x + 6, defender.y - 4, 4, 0, Math.PI * 2);
+    ctx.arc(defender.x + 6, defender.y - 4 + bob, 4, 0, Math.PI * 2);
     ctx.fill();
   });
 }
 
 function drawPowerUp() {
   if (!gameState.powerUp) return;
+  const pulse = 1 + Math.sin(gameState.tick / 10) * 0.1;
   ctx.fillStyle = gameState.powerUp.type === POWER_TYPES.TRUCK ? "#f2c94c" : "#7dd3fc";
   ctx.beginPath();
-  ctx.arc(gameState.powerUp.x, gameState.powerUp.y, gameState.powerUp.radius, 0, Math.PI * 2);
+  ctx.arc(
+    gameState.powerUp.x,
+    gameState.powerUp.y,
+    gameState.powerUp.radius * pulse,
+    0,
+    Math.PI * 2
+  );
   ctx.fill();
 
   ctx.fillStyle = "#1b1b1b";
@@ -413,6 +444,8 @@ function updateUI() {
     powerLabel.textContent = `TRUCK x${player.powerUses}`;
   } else if (player.hurdleActive) {
     powerLabel.textContent = "HURDLE";
+  } else if (player.unstoppable) {
+    powerLabel.textContent = "UNSTOPPABLE";
   } else if (player.pendingPower) {
     powerLabel.textContent = player.pendingPower;
   } else if (!gameState.powerUp) {
@@ -421,6 +454,7 @@ function updateUI() {
 }
 
 function update() {
+  gameState.tick += 1;
   if (!gameState.running) {
     drawField();
     drawDefenders();
@@ -446,24 +480,59 @@ function update() {
   requestAnimationFrame(update);
 }
 
+function normalizeKey(event) {
+  return event.key.length === 1 ? event.key.toLowerCase() : event.key;
+}
+
+function toggleUnstoppable() {
+  player.unstoppable = !player.unstoppable;
+  player.color = player.unstoppable ? "#0b0b0b" : player.baseColor;
+  player.jersey = player.unstoppable ? "#111111" : player.baseJersey;
+  statusLabel.textContent = player.unstoppable ? "UNSTOPPABLE MODE!" : "Back to normal";
+}
+
 window.addEventListener("keydown", (event) => {
-  keys.add(event.key);
-  if (event.key === "q" || event.key === "Q") {
+  if (event.code === "Space") {
+    event.preventDefault();
+    if (!event.repeat) {
+      resetGame();
+      statusLabel.textContent = "Ready";
+      requestAnimationFrame(update);
+    }
+    return;
+  }
+
+  const key = normalizeKey(event);
+  keys.add(key);
+  if (key === "d") {
     activateTruck();
   }
-  if (event.key === "e" || event.key === "E") {
+  if (key === "a") {
     activateHurdle();
+  }
+  if (key === "n") {
+    toggleUnstoppable();
   }
 });
 
 window.addEventListener("keyup", (event) => {
-  keys.delete(event.key);
+  const key = normalizeKey(event);
+  keys.delete(key);
 });
 
 restartButton.addEventListener("click", () => {
   resetGame();
   statusLabel.textContent = "Ready";
   requestAnimationFrame(update);
+});
+
+fullscreenButton.addEventListener("click", () => {
+  if (!fieldPanel) return;
+  if (document.fullscreenElement) {
+    document.exitFullscreen();
+  } else {
+    fieldPanel.requestFullscreen();
+  }
 });
 
 resetGame();
