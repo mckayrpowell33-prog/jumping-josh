@@ -20,8 +20,8 @@ const player = {
   x: field.width / 2,
   y: field.height - 120,
   radius: 18,
-  speed: 2.7,
-  sprintSpeed: 4.2,
+  speed: 3.4,
+  sprintSpeed: 5.4,
   color: "#00338d",
   jersey: "#c60c30",
   baseColor: "#00338d",
@@ -32,6 +32,9 @@ const player = {
   truckActive: false,
   hurdleActive: false,
   unstoppable: false,
+  manualUnstoppable: false,
+  spinActive: false,
+  spinTimer: 0,
   hurdleArc: 0,
   hurdleTimer: 0,
   truckTimer: 0,
@@ -98,6 +101,9 @@ function resetGame() {
   player.powerUses = 0;
   player.pendingPower = null;
   player.unstoppable = false;
+  player.manualUnstoppable = false;
+  player.spinActive = false;
+  player.spinTimer = 0;
   player.color = player.baseColor;
   player.jersey = player.baseJersey;
 
@@ -316,6 +322,9 @@ function handleTouchdown() {
   player.powerUses = 0;
   player.pendingPower = null;
   player.unstoppable = false;
+  player.manualUnstoppable = false;
+  player.spinActive = false;
+  player.spinTimer = 0;
   player.color = player.baseColor;
   player.jersey = player.baseJersey;
 
@@ -335,6 +344,14 @@ function updatePowerTimers() {
     if (player.truckTimer <= 0) {
       player.truckActive = false;
       statusLabel.textContent = "Truck expired";
+    }
+  }
+  if (player.spinActive) {
+    player.spinTimer -= 1;
+    if (player.spinTimer <= 0) {
+      player.spinActive = false;
+      refreshUnstoppableState();
+      statusLabel.textContent = "Spin spent";
     }
   }
   if (player.hurdleActive) {
@@ -424,6 +441,21 @@ function drawPlayer() {
     ctx.stroke();
     ctx.lineWidth = 1;
   }
+
+  if (player.spinActive) {
+    ctx.strokeStyle = "rgba(255, 255, 255, 0.7)";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(
+      player.x,
+      player.y - player.hurdleArc + bob,
+      player.radius + 12,
+      gameState.tick / 6,
+      gameState.tick / 6 + Math.PI * 1.4
+    );
+    ctx.stroke();
+    ctx.lineWidth = 1;
+  }
 }
 
 function drawDefenders() {
@@ -480,6 +512,8 @@ function updateUI() {
     powerLabel.textContent = `TRUCK x${player.powerUses}`;
   } else if (player.hurdleActive) {
     powerLabel.textContent = "HURDLE";
+  } else if (player.spinActive) {
+    powerLabel.textContent = "SPIN MOVE";
   } else if (player.unstoppable) {
     powerLabel.textContent = "UNSTOPPABLE";
   } else if (player.pendingPower) {
@@ -520,11 +554,26 @@ function normalizeKey(event) {
   return event.key.length === 1 ? event.key.toLowerCase() : event.key;
 }
 
-function toggleUnstoppable() {
-  player.unstoppable = !player.unstoppable;
+function refreshUnstoppableState() {
+  player.unstoppable = player.manualUnstoppable || player.spinActive;
   player.color = player.unstoppable ? "#0b0b0b" : player.baseColor;
   player.jersey = player.unstoppable ? "#111111" : player.baseJersey;
-  statusLabel.textContent = player.unstoppable ? "UNSTOPPABLE MODE!" : "Back to normal";
+}
+
+function toggleUnstoppable() {
+  player.manualUnstoppable = !player.manualUnstoppable;
+  refreshUnstoppableState();
+  statusLabel.textContent = player.manualUnstoppable ? "UNSTOPPABLE MODE!" : "Back to normal";
+}
+
+function activateSpinMove() {
+  if (player.spinActive) {
+    return;
+  }
+  player.spinActive = true;
+  player.spinTimer = 72;
+  refreshUnstoppableState();
+  statusLabel.textContent = "SPIN MOVE!";
 }
 
 window.addEventListener("keydown", (event) => {
@@ -545,6 +594,9 @@ window.addEventListener("keydown", (event) => {
   }
   if (key === "a") {
     activateHurdle();
+  }
+  if (key === "e") {
+    activateSpinMove();
   }
   if (key === "n") {
     toggleUnstoppable();
