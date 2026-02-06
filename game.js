@@ -4,6 +4,7 @@ const ctx = canvas.getContext("2d");
 const sprintFill = document.getElementById("sprintFill");
 const powerLabel = document.getElementById("powerLabel");
 const statusLabel = document.getElementById("statusLabel");
+const levelLabel = document.getElementById("levelLabel");
 const restartButton = document.getElementById("restartButton");
 const fullscreenButton = document.getElementById("fullscreenButton");
 const fieldPanel = document.querySelector(".field-panel");
@@ -45,6 +46,8 @@ const gameState = {
   powerUp: null,
   powerUpTimer: 0,
   difficulty: 1,
+  level: 1,
+  maxLevel: 10,
   distanceProgress: 0,
   lastSpawn: 0,
   tick: 0,
@@ -104,11 +107,12 @@ function resetGame() {
   gameState.powerUp = null;
   gameState.powerUpTimer = 0;
   gameState.difficulty = 1;
+  gameState.level = 1;
   gameState.distanceProgress = 0;
   gameState.lastSpawn = 0;
   gameState.tick = 0;
 
-  spawnDefenderWave(3);
+  spawnDefenderWave(6);
 }
 
 function spawnDefenderWave(count) {
@@ -124,7 +128,7 @@ function createDefender() {
     x,
     y,
     radius: 16,
-    speed: 1.5 + Math.random() * 0.8 + gameState.difficulty * 0.25,
+    speed: 1.2 + Math.random() * 0.6 + gameState.difficulty * 0.25,
     angleBias: Math.random() > 0.5 ? 1 : -1,
     knockedDown: false,
     recoverTimer: 0,
@@ -282,18 +286,47 @@ function updatePowerUp() {
 
 function advanceRun() {
   gameState.distanceProgress = (field.height - player.y) / (field.height - field.endZoneHeight);
-  if (gameState.distanceProgress > 0.5 && gameState.difficulty < 2) {
-    gameState.difficulty = 2;
-    spawnDefenderWave(2);
-  }
-  if (gameState.distanceProgress > 0.75 && gameState.difficulty < 3) {
-    gameState.difficulty = 3;
-    spawnDefenderWave(2);
-  }
   if (player.y <= field.endZoneHeight + player.radius) {
-    endGame("Touchdown! You win!");
+    handleTouchdown();
     playBeep("touchdown");
   }
+}
+
+function handleTouchdown() {
+  if (gameState.level >= gameState.maxLevel) {
+    endGame("Touchdown! You win!");
+    return;
+  }
+
+  gameState.level += 1;
+  gameState.difficulty = gameState.level;
+  gameState.message = `Touchdown! Level ${gameState.level}`;
+  statusLabel.textContent = `Level ${gameState.level} begins!`;
+
+  player.x = field.width / 2;
+  player.y = field.height - 120;
+  player.sprintEnergy = 100;
+  player.sprintCooldown = 0;
+  player.isSprinting = false;
+  player.truckActive = false;
+  player.hurdleActive = false;
+  player.hurdleArc = 0;
+  player.hurdleTimer = 0;
+  player.truckTimer = 0;
+  player.powerUses = 0;
+  player.pendingPower = null;
+  player.unstoppable = false;
+  player.color = player.baseColor;
+  player.jersey = player.baseJersey;
+
+  gameState.defenders = [];
+  gameState.powerUp = null;
+  gameState.powerUpTimer = 0;
+  gameState.distanceProgress = 0;
+
+  const baseDefenders = 6;
+  const extraDefenders = Math.min(gameState.level - 1, 6);
+  spawnDefenderWave(baseDefenders + extraDefenders);
 }
 
 function updatePowerTimers() {
@@ -440,6 +473,9 @@ function drawOverlay() {
 
 function updateUI() {
   sprintFill.style.width = `${player.sprintEnergy}%`;
+  if (levelLabel) {
+    levelLabel.textContent = `${gameState.level}/${gameState.maxLevel}`;
+  }
   if (player.truckActive) {
     powerLabel.textContent = `TRUCK x${player.powerUses}`;
   } else if (player.hurdleActive) {
